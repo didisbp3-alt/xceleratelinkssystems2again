@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace APIPSI16.Models;
 
@@ -29,13 +30,18 @@ public partial class User
 
     public string? BannerUrl { get; set; }
 
-    /// <summary>Subscription plan: 0=Free, 1=Pro, 2=Enterprise</summary>
+    /// <summary>Subscription plan: 0=Free, 1=Pro, 2=Enterprise.
+    /// NOTE: column does not yet exist on the live DB — add via the SQL in
+    /// Migrations/20260303000001_AddSubscriptionAndEmployerFields.cs then remove [NotMapped].</summary>
+    [NotMapped]
     public int SubscriptionPlan { get; set; } = 0;
 
     /// <summary>URL of the document uploaded when requesting employer role.</summary>
+    [NotMapped]
     public string? EmployerRequestDocumentUrl { get; set; }
 
     /// <summary>Optional note/reason submitted with the employer role request.</summary>
+    [NotMapped]
     public string? EmployerRequestNote { get; set; }
 
     public virtual ICollection<AuditLog> AuditLogs{ get; set; } = new List<AuditLog>();

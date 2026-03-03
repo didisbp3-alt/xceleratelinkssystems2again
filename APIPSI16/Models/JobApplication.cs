@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace APIPSI16.Models;
 
@@ -28,7 +29,10 @@ public partial class JobApplication
     // Comma-separated job role IDs chosen by the applicant
     public string? SelectedJobRoleIds { get; set; }
 
-    /// <summary>Response from the applicant: null=no action needed, 1=accepted, 2=declined.</summary>
+    /// <summary>Response from the applicant: null=no action needed, 1=accepted, 2=declined.
+    /// NOTE: column does not yet exist on the live DB — add via the SQL in
+    /// Migrations/20260303000001_AddSubscriptionAndEmployerFields.cs then remove [NotMapped].</summary>
+    [NotMapped]
     public byte? ApplicantResponse { get; set; }
 
     public virtual Opportunity Opportunity { get; set; } = null!;

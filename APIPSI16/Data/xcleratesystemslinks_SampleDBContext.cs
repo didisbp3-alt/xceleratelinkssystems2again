@@ -196,7 +196,6 @@ public partial class xcleratesystemslinks_SampleDBContext : DbContext
             entity.Property(e => e.LinkedInUrl).HasMaxLength(300);
             entity.Property(e => e.PortfolioUrl).HasMaxLength(300);
             entity.Property(e => e.SelectedJobRoleIds).HasMaxLength(500);
-            entity.Property(e => e.ApplicantResponse).IsRequired(false);
 
             entity.HasOne(d => d.Opportunity)
                 .WithMany(p => p.JobApplications)
@@ -442,9 +441,6 @@ public partial class xcleratesystemslinks_SampleDBContext : DbContext
             entity.Property(e => e.ProfilePictureUrl)
                 .HasMaxLength(255)
                 .IsUnicode(false);
-            entity.Property(e => e.SubscriptionPlan).HasDefaultValue(0);
-            entity.Property(e => e.EmployerRequestDocumentUrl).HasMaxLength(500);
-            entity.Property(e => e.EmployerRequestNote).HasMaxLength(1000);
         });
 
         modelBuilder.Entity<UserJobPreference>(entity =>
