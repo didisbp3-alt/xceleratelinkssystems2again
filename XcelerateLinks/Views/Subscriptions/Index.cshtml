@@ -1,5 +1,8 @@
 @{
     ViewData["Title"] = "Planos de Subscrição";
+    var currentPlan = ViewBag.SubscriptionPlan as int? ?? 0;
+    var userId = ViewBag.UserId as int? ?? 0;
+    string PlanName(int p) => p switch { 0 => "Free", 1 => "Pro", 2 => "Enterprise", _ => "Free" };
 }
 
 <style>
@@ -89,14 +92,24 @@
         <p>Escolhe o plano que melhor se adequa ao teu perfil — começa grátis e cresce com as tuas necessidades.</p>
     </div>
 
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success mb-3">@TempData["SuccessMessage"]</div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-warning mb-3">@TempData["ErrorMessage"]</div>
+    }
+
     <div class="coming-soon-banner">
-        ⚡ Os pagamentos ainda estão a ser configurados. Todos os planos são gratuitos por enquanto — aproveita!
+        ⚡ Plano atual: <strong>@PlanName(currentPlan)</strong> — Os pagamentos ainda estão a ser configurados. Podes mudar de plano livremente por enquanto!
     </div>
 
     <div class="plans-grid">
 
         <!-- FREE -->
-        <div class="plan-card">
+        <div class="plan-card @(currentPlan == 0 ? "current-plan" : "")">
+            @if (currentPlan == 0) { <div class="plan-badge" style="background:#059669;">✓ Plano atual</div> }
             <div class="plan-icon">🌱</div>
             <div class="plan-name">Free</div>
             <div class="plan-tagline">Para quem está a começar</div>
@@ -107,20 +120,32 @@
             <div class="price-note">Sempre gratuito</div>
             <ul class="plan-features">
                 <li><span class="feat-icon">✅</span> Perfil profissional público</li>
-                <li><span class="feat-icon">✅</span> Candidatura a vagas (até 5/mês)</li>
-                <li><span class="feat-icon">✅</span> Rede de ligações (até 50)</li>
-                <li><span class="feat-icon">✅</span> Mensagens (até 20/mês)</li>
+                <li><span class="feat-icon">✅</span> Candidatura a vagas (<strong>até 5/mês</strong>)</li>
+                <li><span class="feat-icon">✅</span> Rede de ligações (<strong>até 50</strong>)</li>
+                <li><span class="feat-icon">✅</span> Mensagens (<strong>até 20/mês</strong>)</li>
                 <li><span class="feat-icon">✅</span> Explorar empresas e oportunidades</li>
                 <li><span class="feat-icon feat-off">✗</span><span class="feat-off">Candidaturas ilimitadas</span></li>
                 <li><span class="feat-icon feat-off">✗</span><span class="feat-off">Destaque no perfil</span></li>
                 <li><span class="feat-icon feat-off">✗</span><span class="feat-off">Estatísticas avançadas</span></li>
             </ul>
-            <button type="button" class="btn-plan btn-plan-free" onclick="showComingSoon()">Plano atual</button>
+            @if (currentPlan == 0)
+            {
+                <button type="button" class="btn-plan btn-plan-free" disabled>✓ Plano atual</button>
+            }
+            else
+            {
+                <form asp-action="Upgrade" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="plan" value="0" />
+                    <button type="submit" class="btn-plan btn-plan-free">Mudar para Free</button>
+                </form>
+            }
         </div>
 
         <!-- PRO -->
-        <div class="plan-card featured">
-            <div class="plan-badge">✨ Mais popular</div>
+        <div class="plan-card featured @(currentPlan == 1 ? "current-plan" : "")">
+            @if (currentPlan == 1) { <div class="plan-badge" style="background:#059669;">✓ Plano atual</div> }
+            else { <div class="plan-badge">✨ Mais popular</div> }
             <div class="plan-icon">🚀</div>
             <div class="plan-name">Pro</div>
             <div class="plan-tagline">Para profissionais sérios</div>
@@ -131,19 +156,31 @@
             <div class="price-note">Faturado mensalmente · cancela quando quiseres</div>
             <ul class="plan-features">
                 <li><span class="feat-icon">✅</span> Tudo do plano Free</li>
-                <li><span class="feat-icon">✅</span> Candidaturas ilimitadas</li>
-                <li><span class="feat-icon">✅</span> Ligações ilimitadas</li>
-                <li><span class="feat-icon">✅</span> Mensagens ilimitadas</li>
+                <li><span class="feat-icon">✅</span> <strong>Candidaturas ilimitadas</strong></li>
+                <li><span class="feat-icon">✅</span> <strong>Ligações ilimitadas</strong></li>
+                <li><span class="feat-icon">✅</span> <strong>Mensagens ilimitadas</strong></li>
                 <li><span class="feat-icon">✅</span> Perfil em destaque nos resultados</li>
                 <li><span class="feat-icon">✅</span> Ver quem visitou o teu perfil</li>
                 <li><span class="feat-icon">✅</span> Alertas de vagas personalizados</li>
                 <li><span class="feat-icon feat-off">✗</span><span class="feat-off">Gestão de empresa (Employer)</span></li>
             </ul>
-            <button type="button" class="btn-plan btn-plan-pro" onclick="showComingSoon()">Começar Pro</button>
+            @if (currentPlan == 1)
+            {
+                <button type="button" class="btn-plan btn-plan-pro" disabled>✓ Plano atual</button>
+            }
+            else
+            {
+                <form asp-action="Upgrade" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="plan" value="1" />
+                    <button type="submit" class="btn-plan btn-plan-pro">Começar Pro</button>
+                </form>
+            }
         </div>
 
         <!-- ENTERPRISE -->
-        <div class="plan-card">
+        <div class="plan-card @(currentPlan == 2 ? "current-plan" : "")">
+            @if (currentPlan == 2) { <div class="plan-badge" style="background:#059669;">✓ Plano atual</div> }
             <div class="plan-icon">🏢</div>
             <div class="plan-name">Enterprise</div>
             <div class="plan-tagline">Para empresas que recrutam</div>
@@ -155,14 +192,25 @@
             <ul class="plan-features">
                 <li><span class="feat-icon">✅</span> Tudo do plano Pro</li>
                 <li><span class="feat-icon">✅</span> Página de empresa verificada</li>
-                <li><span class="feat-icon">✅</span> Vagas ilimitadas</li>
+                <li><span class="feat-icon">✅</span> <strong>Vagas ilimitadas</strong></li>
                 <li><span class="feat-icon">✅</span> Pipeline de candidaturas completo</li>
                 <li><span class="feat-icon">✅</span> Equipa de recrutamento (5 membros)</li>
                 <li><span class="feat-icon">✅</span> Análise de candidatos com IA</li>
                 <li><span class="feat-icon">✅</span> Exportação de candidaturas (CSV)</li>
                 <li><span class="feat-icon">✅</span> Suporte prioritário</li>
             </ul>
-            <button type="button" class="btn-plan btn-plan-ent" onclick="showComingSoon()">Contactar para Enterprise</button>
+            @if (currentPlan == 2)
+            {
+                <button type="button" class="btn-plan btn-plan-ent" disabled>✓ Plano atual</button>
+            }
+            else
+            {
+                <form asp-action="Upgrade" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="plan" value="2" />
+                    <button type="submit" class="btn-plan btn-plan-ent">Ativar Enterprise</button>
+                </form>
+            }
         </div>
     </div>
 
@@ -189,15 +237,11 @@
 </div>
 
 <div id="coming-soon-toast" style="display:none;position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:rgba(20,24,41,0.95);border:1px solid rgba(0,82,204,0.4);color:#fff;border-radius:12px;padding:0.85rem 1.5rem;font-size:0.9rem;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
-    ⚡ Pagamentos em breve — estás no plano gratuito por enquanto!
+    ⚡ Pagamentos em breve — a mudança de plano é gratuita durante o período de testes!
 </div>
 
 @section Scripts {
 <script>
-function showComingSoon() {
-    var t = document.getElementById('coming-soon-toast');
-    t.style.display = 'block';
-    setTimeout(function() { t.style.display = 'none'; }, 3000);
-}
+// Plans page loaded — no additional scripts needed
 </script>
 }

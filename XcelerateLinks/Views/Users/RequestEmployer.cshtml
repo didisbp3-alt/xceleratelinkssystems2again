@@ -78,6 +78,25 @@
                     <small style="font-size:0.75rem;color:var(--dark-text-muted,#a8b2c1);">Seleciona a empresa à qual te queres associar.</small>
                 </div>
 
+                <!-- Role within company -->
+                <div class="form-group-styled mb-4" id="roleGroup" style="display:none;">
+                    <label style="font-size:0.85rem;font-weight:600;color:var(--dark-text-muted,#a8b2c1);display:block;margin-bottom:0.5rem;">Função na empresa</label>
+                    <select name="requestedCompanyRole"
+                            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:0.55rem 0.85rem;color:inherit;font-size:0.9rem;outline:none;">
+                        <option value="1">🔍 Recrutador — Publica e gere vagas de recrutamento</option>
+                        <option value="2">👔 Gestor de RH — Gere candidaturas e pode fazer ofertas</option>
+                        <option value="3">🏢 Admin de Empresa — Acesso total, pode gerir a equipa</option>
+                    </select>
+                    <small style="font-size:0.75rem;color:var(--dark-text-muted,#a8b2c1);">A função final será definida pelo administrador ao aprovar o pedido.</small>
+                </div>
+
+                <!-- Note -->
+                <div class="form-group-styled mb-4">
+                    <label style="font-size:0.85rem;font-weight:600;color:var(--dark-text-muted,#a8b2c1);display:block;margin-bottom:0.5rem;">Nota / Motivo (opcional)</label>
+                    <textarea name="note" rows="3" placeholder="Explica brevemente porquê pretendes ser empregador nesta plataforma..."
+                              style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:0.55rem 0.9rem;color:inherit;font-size:0.9rem;outline:none;resize:vertical;"></textarea>
+                </div>
+
                 <div class="upload-area" onclick="document.getElementById('docFile').click()">
                     <input type="file" id="docFile" name="document" accept=".pdf,.jpg,.jpeg,.png" onchange="showPreview(this)" />
                     <div class="upload-icon">📄</div>
@@ -112,6 +131,11 @@ if (compSearch && compSelect) {
             if (!opt.value) return;
             opt.style.display = opt.text.toLowerCase().includes(q) ? '' : 'none';
         });
+    });
+    // Show/hide role group based on company selection
+    compSelect.addEventListener('change', function() {
+        var roleGroup = document.getElementById('roleGroup');
+        if (roleGroup) roleGroup.style.display = this.value ? 'block' : 'none';
     });
 }
 </script>

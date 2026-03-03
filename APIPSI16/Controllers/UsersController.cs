@@ -101,7 +101,8 @@ namespace APIPSI16.Controllers
                     PhoneNumber = u.PhoneNumber,
                     Role = u.Role,
                     ProfilePictureUrl = u.ProfilePictureUrl,
-                    BannerUrl = u.BannerUrl
+                    BannerUrl = u.BannerUrl,
+                    SubscriptionPlan = u.SubscriptionPlan
                 })
                 .FirstOrDefaultAsync();
 
@@ -261,7 +262,7 @@ namespace APIPSI16.Controllers
         // POST: api/Users/me/request-employer – user uploads documents to request employer role
         [HttpPost("me/request-employer")]
         [SwaggerFileUpload]
-        public async Task<IActionResult> RequestEmployerRole(IFormFile? document, [FromForm] int? companyId = null)
+        public async Task<IActionResult> RequestEmployerRole(IFormFile? document, [FromForm] int? companyId = null, [FromForm] string? note = null)
         {
             var uid = GetCurrentUserId();
             if (uid == null) return Unauthorized();
@@ -278,6 +279,8 @@ namespace APIPSI16.Controllers
 
             // Set pending employer status: Role = 3 means "Pending Employer"
             user.Role = 3;
+            user.EmployerRequestDocumentUrl = docUrl;
+            user.EmployerRequestNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
 
             // Optionally join the company as pending member
             if (companyId.HasValue)
@@ -290,7 +293,7 @@ namespace APIPSI16.Controllers
                     {
                         CompanyId = companyId.Value,
                         UserId = uid.Value,
-                        Role = 0, // 0 = pending, 1 = member, 2 = admin
+                        Role = 0, // 0 = pending, 1 = Recruiter, 2 = HRManager, 3 = CompanyAdmin
                         StartDate = DateOnly.FromDateTime(DateTime.UtcNow)
                     });
                 }
@@ -329,20 +332,44 @@ namespace APIPSI16.Controllers
             return Ok(new { message = "Pedido submetido. Aguarda aprovação do administrador.", documentUrl = docUrl });
         }
 
-        // POST: api/Users/{id}/approve-employer – admin/company-manager approves employer role
+        // POST: api/Users/{id}/approve-employer – admin or CompanyAdmin member can approve employer role
         [HttpPost("{id}/approve-employer")]
         [Authorize(Roles = "0,2")] // Admin or Employer
-        public async Task<IActionResult> ApproveEmployerRole(int id)
+        public async Task<IActionResult> ApproveEmployerRole(int id, [FromQuery] int? companyMemberRole = null)
         {
+            var actorId = GetCurrentUserId();
+            var actorRole = GetCurrentUserRole();
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return NotFound();
+
+            // Employers (role=2) can only approve if they are CompanyAdmin (CompanyMember.Role=3) in the same company
+            if (actorRole == "2")
+            {
+                var isCompanyAdmin = await _context.CompanyMembers
+                    .AnyAsync(cm => cm.UserId == actorId && cm.Role == 3);
+                if (!isCompanyAdmin)
+                    return Forbid("Apenas admins de empresa podem aprovar pedidos de empregador.");
+            }
 
             user.Role = 2; // Employer
             await _context.SaveChangesAsync();
 
+            // If target user is a pending company member, activate them with chosen role (default=Recruiter=1)
+            var pendingMembership = await _context.CompanyMembers
+                .Where(cm => cm.UserId == id && cm.Role == 0)
+                .FirstOrDefaultAsync();
+            if (pendingMembership != null)
+            {
+                pendingMembership.Role = companyMemberRole.HasValue && companyMemberRole.Value is >= 1 and <= 3
+                    ? companyMemberRole.Value
+                    : 1; // Default to Recruiter
+                _context.CompanyMembers.Update(pendingMembership);
+            }
+
             await _context.AuditLogs.AddAsync(new AuditLog
             {
-                UserId = GetCurrentUserId() ?? 0,
+                UserId = actorId ?? 0,
                 Action = "ApproveEmployerRole",
                 TargetType = "User",
                 TargetId = id,
@@ -353,15 +380,34 @@ namespace APIPSI16.Controllers
             return Ok(new { message = "Utilizador aprovado como empregador." });
         }
 
-        // POST: api/Users/{id}/reject-employer – admin can reject
+        // POST: api/Users/{id}/reject-employer – admin or CompanyAdmin can reject
         [HttpPost("{id}/reject-employer")]
-        [Authorize(Roles = "0")]
+        [Authorize(Roles = "0,2")]
         public async Task<IActionResult> RejectEmployerRole(int id)
         {
+            var actorId = GetCurrentUserId();
+            var actorRole = GetCurrentUserRole();
+
+            if (actorRole == "2")
+            {
+                var isCompanyAdmin = await _context.CompanyMembers
+                    .AnyAsync(cm => cm.UserId == actorId && cm.Role == 3);
+                if (!isCompanyAdmin)
+                    return Forbid("Apenas admins de empresa podem rejeitar pedidos de empregador.");
+            }
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return NotFound();
 
             user.Role = 1; // Back to regular user
+            user.EmployerRequestDocumentUrl = null;
+            user.EmployerRequestNote = null;
+
+            // Remove pending company memberships
+            var pendingMemberships = _context.CompanyMembers
+                .Where(cm => cm.UserId == id && cm.Role == 0);
+            _context.CompanyMembers.RemoveRange(pendingMemberships);
+
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Pedido de empregador rejeitado." });
@@ -369,18 +415,43 @@ namespace APIPSI16.Controllers
 
         // GET: api/Users/pending-employers – list users with Role = 3 (pending) for admin
         [HttpGet("pending-employers")]
-        [Authorize(Roles = "0")]
+        [Authorize(Roles = "0,2")]
         public async Task<IActionResult> GetPendingEmployers()
         {
-            var pending = await _context.Users
-                .Where(u => u.Role == 3)
+            var actorId = GetCurrentUserId();
+            var actorRole = GetCurrentUserRole();
+
+            // Employers can only see pending requests for companies they are CompanyAdmin of
+            IQueryable<User> query = _context.Users.Where(u => u.Role == 3);
+
+            if (actorRole == "2")
+            {
+                // Find companies where actor is CompanyAdmin (role=3)
+                var adminCompanyIds = await _context.CompanyMembers
+                    .Where(cm => cm.UserId == actorId && cm.Role == 3)
+                    .Select(cm => cm.CompanyId)
+                    .ToListAsync();
+
+                // Only show pending users who requested to join those companies
+                var pendingInMyCompanies = await _context.CompanyMembers
+                    .Where(cm => adminCompanyIds.Contains(cm.CompanyId) && cm.Role == 0)
+                    .Select(cm => cm.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+                query = query.Where(u => pendingInMyCompanies.Contains(u.UserId));
+            }
+
+            var pending = await query
                 .Select(u => new UserDTO
                 {
                     UserId = u.UserId,
                     Name = u.Name,
                     Email = u.Email,
                     ProfilePictureUrl = u.ProfilePictureUrl,
-                    Role = u.Role
+                    Role = u.Role,
+                    EmployerRequestDocumentUrl = u.EmployerRequestDocumentUrl,
+                    EmployerRequestNote = u.EmployerRequestNote
                 })
                 .ToListAsync();
 
@@ -521,6 +592,55 @@ namespace APIPSI16.Controllers
             return NoContent();
         }
 
+        // PUT: api/Users/{id}/subscription — update the user's subscription plan
+        [HttpPut("{id}/subscription")]
+        public async Task<IActionResult> UpdateSubscription(int id, [FromBody] UpdateSubscriptionDto dto)
+        {
+            var currentUserId = GetCurrentUserId();
+            var userRole = GetCurrentUserRole();
+
+            if (userRole != "0" && currentUserId != id) return Forbid();
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound();
+
+            if (dto.Plan < 0 || dto.Plan > 2) return BadRequest("Invalid subscription plan. Use 0=Free, 1=Pro, 2=Enterprise.");
+
+            user.SubscriptionPlan = dto.Plan;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { subscriptionPlan = user.SubscriptionPlan });
+        }
+
+        // PUT: api/Users/{id}/company-role — update a member's role within a company (CompanyAdmin only)
+        [HttpPut("{id}/company-role")]
+        [Authorize(Roles = "0,2")]
+        public async Task<IActionResult> UpdateCompanyMemberRole(int id, [FromBody] UpdateCompanyMemberRoleDto dto)
+        {
+            var actorId = GetCurrentUserId();
+            var actorRole = GetCurrentUserRole();
+
+            if (dto.NewRole < 1 || dto.NewRole > 3)
+                return BadRequest("Invalid role. Use 1=Recruiter, 2=HRManager, 3=CompanyAdmin.");
+
+            // Verify actor is CompanyAdmin of the target company (or system admin)
+            if (actorRole != "0")
+            {
+                var isCompanyAdmin = await _context.CompanyMembers
+                    .AnyAsync(cm => cm.CompanyId == dto.CompanyId && cm.UserId == actorId && cm.Role == 3);
+                if (!isCompanyAdmin) return Forbid("Apenas admins de empresa podem alterar funções de membros.");
+            }
+
+            var member = await _context.CompanyMembers
+                .FirstOrDefaultAsync(cm => cm.CompanyId == dto.CompanyId && cm.UserId == id);
+            if (member == null) return NotFound("Company member not found.");
+
+            member.Role = dto.NewRole;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { userId = id, companyId = dto.CompanyId, newRole = member.Role });
+        }
+
         private bool UserExists(int id)
         {
             return _context.Users.Any(u => u.UserId == id);
@@ -572,5 +692,18 @@ namespace APIPSI16.Controllers
             return Ok(new { UserCount = userCount, CompanyCount = companyCount, OppCount = oppCount, ActiveConnections = activeConnections });
         }
 
+    }
+
+    public class UpdateSubscriptionDto
+    {
+        /// <summary>0=Free, 1=Pro, 2=Enterprise</summary>
+        public int Plan { get; set; }
+    }
+
+    public class UpdateCompanyMemberRoleDto
+    {
+        public int CompanyId { get; set; }
+        /// <summary>1=Recruiter, 2=HRManager, 3=CompanyAdmin</summary>
+        public int NewRole { get; set; }
     }
 }

@@ -23,50 +23,74 @@ namespace XcelerateLinks.Mvc.Controllers
                 return RedirectToAction("Login", "Account");
 
             var client = CreateAuthorizedClient();
-            var resp = await client.GetAsync("api/opportunities");
-            if (!resp.IsSuccessStatusCode)
-            {
-                ViewBag.Error = await SafeReadStringAsync(resp) ?? "Unable to load opportunities.";
-                return View(IsAdmin() ? "Index" : "UserIndex", Array.Empty<Opportunity>());
-            }
-
-            IEnumerable<Opportunity> opportunities = await resp.Content.ReadFromJsonAsync<IEnumerable<Opportunity>>()
-                                                      ?? Array.Empty<Opportunity>();
 
             if (IsAdmin())
-                return View(opportunities);
+            {
+                var adminResp = await client.GetAsync("api/opportunities");
+                if (!adminResp.IsSuccessStatusCode)
+                {
+                    ViewBag.Error = await SafeReadStringAsync(adminResp) ?? "Unable to load opportunities.";
+                    return View(Array.Empty<Opportunity>());
+                }
+                var adminOpps = await adminResp.Content.ReadFromJsonAsync<IEnumerable<Opportunity>>() ?? Array.Empty<Opportunity>();
+                return View(adminOpps);
+            }
 
-            // User / employer: apply filters
+            // User / employer: load with match scores
+            var resp = await client.GetAsync("api/opportunities/with-match");
+            List<OpportunityWithMatch> opportunitiesWithMatch;
+
+            if (resp.IsSuccessStatusCode)
+            {
+                opportunitiesWithMatch = await resp.Content.ReadFromJsonAsync<List<OpportunityWithMatch>>()
+                                         ?? new List<OpportunityWithMatch>();
+            }
+            else
+            {
+                // Fallback to regular endpoint
+                var fallbackResp = await client.GetAsync("api/opportunities");
+                var plain = fallbackResp.IsSuccessStatusCode
+                    ? await fallbackResp.Content.ReadFromJsonAsync<IEnumerable<OpportunityPlain>>() ?? Array.Empty<OpportunityPlain>()
+                    : Array.Empty<OpportunityPlain>();
+                opportunitiesWithMatch = plain.Select(o => new OpportunityWithMatch
+                {
+                    Id = o.Id, Title = o.Title, Location = o.Location,
+                    EmploymentType = o.EmploymentType, SeniorityLevel = o.SeniorityLevel,
+                    RemoteOption = o.RemoteOption, CompanyId = o.CompanyId, CompanyName = o.CompanyName,
+                    MatchScore = 0
+                }).ToList();
+            }
+
+            // Apply filters
             if (!string.IsNullOrWhiteSpace(q))
-                opportunities = opportunities.Where(o =>
+                opportunitiesWithMatch = opportunitiesWithMatch.Where(o =>
                     (o.Title ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                    (o.Location ?? "").Contains(q, StringComparison.OrdinalIgnoreCase));
+                    (o.Location ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
 
             if (!string.IsNullOrWhiteSpace(location))
-                opportunities = opportunities.Where(o =>
-                    (o.Location ?? "").Contains(location, StringComparison.OrdinalIgnoreCase));
+                opportunitiesWithMatch = opportunitiesWithMatch.Where(o =>
+                    (o.Location ?? "").Contains(location, StringComparison.OrdinalIgnoreCase)).ToList();
 
             if (employmentType.HasValue)
-                opportunities = opportunities.Where(o => o.EmploymentType == employmentType.Value);
+                opportunitiesWithMatch = opportunitiesWithMatch.Where(o => o.EmploymentType == employmentType.Value).ToList();
 
             if (remoteOption.HasValue)
-                opportunities = opportunities.Where(o => o.RemoteOption == remoteOption.Value);
-
-            // Load recommended if requested
-            IEnumerable<Opportunity>? recommendedOpps = null;
-            if (recommended)
-            {
-                var recResp = await client.GetAsync("api/opportunities/recommended");
-                if (recResp.IsSuccessStatusCode)
-                    recommendedOpps = await recResp.Content.ReadFromJsonAsync<IEnumerable<Opportunity>>() ?? Array.Empty<Opportunity>();
-            }
+                opportunitiesWithMatch = opportunitiesWithMatch.Where(o => o.RemoteOption == remoteOption.Value).ToList();
 
             ViewBag.Q = q;
             ViewBag.Location = location;
             ViewBag.EmploymentType = employmentType;
             ViewBag.RemoteOption = remoteOption;
             ViewBag.Recommended = recommended;
-            ViewBag.RecommendedList = recommendedOpps;
+            ViewBag.OpportunitiesWithMatch = opportunitiesWithMatch;
+
+            // Also map to Opportunity for backwards-compat with existing model binding in view
+            var opportunities = opportunitiesWithMatch.Select(o => new Opportunity
+            {
+                Id = o.Id, Title = o.Title, Location = o.Location,
+                EmploymentType = o.EmploymentType, SeniorityLevel = o.SeniorityLevel,
+                RemoteOption = o.RemoteOption, CompanyId = o.CompanyId
+            });
 
             return View("UserIndex", opportunities);
         }
@@ -283,5 +307,31 @@ namespace XcelerateLinks.Mvc.Controllers
         }
 
         public record CompanyDropItem(int CompanyId = 0, string? CompanyName = null);
+    }
+
+    public class OpportunityWithMatch
+    {
+        public int Id { get; set; }
+        public string? Title { get; set; }
+        public string? Location { get; set; }
+        public byte? EmploymentType { get; set; }
+        public byte? SeniorityLevel { get; set; }
+        public byte? RemoteOption { get; set; }
+        public int? CompanyId { get; set; }
+        public string? CompanyName { get; set; }
+        public string? RequiredJobRoleIds { get; set; }
+        public int MatchScore { get; set; }
+    }
+
+    public class OpportunityPlain
+    {
+        public int Id { get; set; }
+        public string? Title { get; set; }
+        public string? Location { get; set; }
+        public byte? EmploymentType { get; set; }
+        public byte? SeniorityLevel { get; set; }
+        public byte? RemoteOption { get; set; }
+        public int? CompanyId { get; set; }
+        public string? CompanyName { get; set; }
     }
 }

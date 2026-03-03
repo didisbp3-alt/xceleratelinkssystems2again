@@ -22,6 +22,8 @@
     var isOwner = myId == Model.UserId.ToString();
     var role = User.FindFirst(ClaimTypes.Role)?.Value;
     var isAdmin = role == "0";
+    var isEmployer = role == "2";
+    var canManageAsEmployer = isAdmin || isEmployer;
 }
 
 <style>
@@ -150,6 +152,20 @@
                     <span>@Model.UpdatedAt.Value.ToString("d MMMM yyyy, HH:mm")</span>
                 </div>
             }
+            @if (Model.ApplicantResponse.HasValue)
+            {
+                <div class="detail-row">
+                    <span class="label">Resposta do candidato</span>
+                    @if (Model.ApplicantResponse == 1)
+                    {
+                        <span style="color:#10b981;font-weight:600;">✅ Aceite</span>
+                    }
+                    else if (Model.ApplicantResponse == 2)
+                    {
+                        <span style="color:#ef4444;font-weight:600;">❌ Recusado</span>
+                    }
+                </div>
+            }
         </div>
 
         <div class="app-actions-bar">
@@ -158,6 +174,92 @@
             {
                 <a asp-action="Delete" asp-route-id="@Model.JobApplicationId" class="btn-danger-soft">Retirar candidatura</a>
             }
+
+            @* Applicant responses for interview and offer stages *@
+            @if (isOwner && Model.Status == 2 && !Model.ApplicantResponse.HasValue)
+            {
+                <form asp-action="ApplicantRespond" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                    <input type="hidden" name="response" value="1" />
+                    <button type="submit" class="btn-primary-soft" style="background:#059669;">✓ Confirmar entrevista</button>
+                </form>
+                <form asp-action="ApplicantRespond" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                    <input type="hidden" name="response" value="2" />
+                    <button type="submit" class="btn-danger-soft">✗ Recusar entrevista</button>
+                </form>
+            }
+            @if (isOwner && Model.Status == 3 && !Model.ApplicantResponse.HasValue)
+            {
+                <form asp-action="ApplicantRespond" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                    <input type="hidden" name="response" value="1" />
+                    <button type="submit" class="btn-primary-soft" style="background:#10b981;">🎉 Aceitar oferta</button>
+                </form>
+                <form asp-action="ApplicantRespond" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                    <input type="hidden" name="response" value="2" />
+                    <button type="submit" class="btn-danger-soft">✗ Recusar oferta</button>
+                </form>
+            }
+
+            @* Employer actions *@
+            @if (canManageAsEmployer && !isOwner && Model.Status != 5)
+            {
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.08);width:100%;">
+                    <span style="font-size:0.78rem;color:var(--dark-text-muted,#a8b2c1);width:100%;margin-bottom:0.25rem;">Ações do empregador:</span>
+                    @if (Model.Status == 0)
+                    {
+                        <form asp-action="EmployerAction" method="post" style="display:inline;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                            <input type="hidden" name="action" value="screen" />
+                            <button type="submit" class="btn-primary-soft" style="font-size:0.82rem;padding:0.4rem 1rem;">🔍 Mover para Em Análise</button>
+                        </form>
+                    }
+                    @if (Model.Status == 1)
+                    {
+                        <form asp-action="EmployerAction" method="post" style="display:inline;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                            <input type="hidden" name="action" value="interview" />
+                            <button type="submit" class="btn-primary-soft" style="font-size:0.82rem;padding:0.4rem 1rem;background:#7c3aed;">🎤 Agendar Entrevista</button>
+                        </form>
+                    }
+                    @if (Model.Status == 2 && Model.ApplicantResponse == 1)
+                    {
+                        <form asp-action="EmployerAction" method="post" style="display:inline;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                            <input type="hidden" name="action" value="offer" />
+                            <button type="submit" class="btn-primary-soft" style="font-size:0.82rem;padding:0.4rem 1rem;background:#059669;">🎉 Fazer Oferta</button>
+                        </form>
+                    }
+                    @if (Model.Status == 3 && Model.ApplicantResponse == 1)
+                    {
+                        <form asp-action="EmployerAction" method="post" style="display:inline;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                            <input type="hidden" name="action" value="hire" />
+                            <button type="submit" class="btn-primary-soft" style="font-size:0.82rem;padding:0.4rem 1rem;background:#10b981;">✅ Contratar</button>
+                        </form>
+                    }
+                    @if (Model.Status != 4)
+                    {
+                        <form asp-action="EmployerAction" method="post" style="display:inline;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.JobApplicationId" />
+                            <input type="hidden" name="action" value="reject" />
+                            <button type="submit" class="btn-danger-soft" style="font-size:0.82rem;padding:0.4rem 1rem;">✗ Rejeitar candidatura</button>
+                        </form>
+                    }
+                </div>
+            }
+
             @if (isAdmin)
             {
                 <a asp-action="Index" class="btn-outline-soft">← Lista</a>

@@ -1,8 +1,10 @@
 @model IEnumerable<APIPSI16.Models.Opportunity>
+@using XcelerateLinks.Mvc.Controllers
 @{
     ViewData["Title"] = "Oportunidades de Emprego";
     var employmentTypes = new Dictionary<byte, string> { {1,"Full-Time"},{2,"Part-Time"},{3,"Contract"},{4,"Internship"},{5,"Freelance"} };
     var remoteOptions = new Dictionary<byte, string> { {0,"No local"},{1,"Híbrido"},{2,"Remoto"} };
+    var oppsWithMatch = ViewBag.OpportunitiesWithMatch as List<OpportunityWithMatch>;
 }
 
 <style>
@@ -165,11 +167,27 @@
                 var remLabel = (item.RemoteOption.HasValue && remoteOptions.ContainsKey(item.RemoteOption.Value))
                     ? remoteOptions[item.RemoteOption.Value] : null;
 
+                var matchItem = oppsWithMatch?.FirstOrDefault(m => m.Id == item.Id);
+                var matchScore = matchItem?.MatchScore ?? 0;
+                var matchColor = matchScore >= 75 ? "#00DD55" : matchScore >= 40 ? "#f59e0b" : "#6b7280";
+
                 <div class="job-card">
                     <div class="job-logo">🏢</div>
                     <div class="job-info">
-                        <a asp-action="Details" asp-route-id="@item.Id" class="job-title">@(item.Title ?? "Oportunidade")</a>
-                        @if (item.Company != null || item.CompanyId.HasValue)
+                        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+                            <a asp-action="Details" asp-route-id="@item.Id" class="job-title">@(item.Title ?? "Oportunidade")</a>
+                            @if (matchScore > 0)
+                            {
+                                <span style="font-size:0.72rem;font-weight:700;background:@(matchColor + "1A");border:1px solid @(matchColor + "55");color:@matchColor;border-radius:20px;padding:0.15rem 0.55rem;white-space:nowrap;">
+                                    @matchScore% match
+                                </span>
+                            }
+                        </div>
+                        @if (matchItem?.CompanyName != null)
+                        {
+                            <p class="job-company">@matchItem.CompanyName</p>
+                        }
+                        else if (item.Company != null || item.CompanyId.HasValue)
                         {
                             <p class="job-company">@(item.Company?.Name ?? $"Empresa #{item.CompanyId}")</p>
                         }

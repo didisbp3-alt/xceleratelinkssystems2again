@@ -35,6 +35,16 @@ namespace APIPSI16.Controllers
 
             if (existing != null) return Conflict(new { existing.ConnectionId, existing.Status });
 
+            // Enforce Free plan connection limit (50 accepted connections)
+            var user = await _db.Users.FindAsync(requesterId.Value);
+            if (user != null && user.SubscriptionPlan == 0)
+            {
+                var connectionCount = await _db.Connections.CountAsync(c =>
+                    (c.RequesterUserId == requesterId || c.AddresseeUserId == requesterId) && c.Status == 1);
+                if (connectionCount >= 50)
+                    return StatusCode(429, new { message = "Limite de ligações atingido para o plano Free (50). Faz upgrade para Pro para ligações ilimitadas.", limitReached = true, plan = "Free", limit = 50 });
+            }
+
             var conn = new APIPSI16.Models.Connection
             {
                 RequesterUserId = requesterId.Value,

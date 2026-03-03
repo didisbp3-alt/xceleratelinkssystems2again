@@ -207,7 +207,7 @@ namespace XcelerateLinks.Mvc.Controllers
         // POST: submit employer request with optional document
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RequestEmployer(IFormFile? document, int? companyId = null)
+        public async Task<IActionResult> RequestEmployer(IFormFile? document, int? companyId = null, string? note = null)
         {
             if (!await ValidateSessionAsync())
                 return RedirectToAction("Login", "Account");
@@ -215,22 +215,17 @@ namespace XcelerateLinks.Mvc.Controllers
             var client = CreateAuthorizedClient();
             HttpResponseMessage resp;
 
+            using var form = new MultipartFormDataContent();
             if (document != null && document.Length > 0)
             {
-                using var form = new MultipartFormDataContent();
                 var stream = document.OpenReadStream();
                 form.Add(new StreamContent(stream), "document", document.FileName);
-                if (companyId.HasValue)
-                    form.Add(new StringContent(companyId.Value.ToString()), "companyId");
-                resp = await client.PostAsync("api/users/me/request-employer", form);
             }
-            else
-            {
-                var url = companyId.HasValue
-                    ? $"api/users/me/request-employer?companyId={companyId.Value}"
-                    : "api/users/me/request-employer";
-                resp = await client.PostAsync(url, null);
-            }
+            if (companyId.HasValue)
+                form.Add(new StringContent(companyId.Value.ToString()), "companyId");
+            if (!string.IsNullOrWhiteSpace(note))
+                form.Add(new StringContent(note), "note");
+            resp = await client.PostAsync("api/users/me/request-employer", form);
 
             if (!resp.IsSuccessStatusCode)
             {

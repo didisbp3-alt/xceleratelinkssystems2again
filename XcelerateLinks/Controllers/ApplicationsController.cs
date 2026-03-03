@@ -251,6 +251,53 @@ namespace XcelerateLinks.Mvc.Controllers
             return await resp.Content.ReadFromJsonAsync<IEnumerable<Opportunity>>() ?? Array.Empty<Opportunity>();
         }
 
+        // POST: applicant responds to interview or offer
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ApplicantRespond(int id, byte response)
+        {
+            if (!await ValidateSessionAsync())
+                return RedirectToAction("Login", "Account");
+
+            var client = CreateAuthorizedClient();
+            var payload = new { Response = response };
+            var resp = await client.PostAsJsonAsync($"api/jobapplications/{id}/applicant-respond", payload);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                TempData["ErrorMessage"] = await SafeReadStringAsync(resp) ?? "Não foi possível registar a resposta.";
+            }
+            else
+            {
+                TempData["SuccessMessage"] = response == 1 ? "Resposta aceite registada com sucesso." : "Resposta recusada registada com sucesso.";
+            }
+
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        // POST: employer takes action on application
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EmployerAction(int id, string action, string? notes = null, int? returnCompanyId = null)
+        {
+            if (!await ValidateSessionAsync())
+                return RedirectToAction("Login", "Account");
+
+            var client = CreateAuthorizedClient();
+            var payload = new { Action = action, Notes = notes };
+            var resp = await client.PostAsJsonAsync($"api/jobapplications/{id}/employer-action", payload);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                TempData["ErrorMessage"] = await SafeReadStringAsync(resp) ?? "Não foi possível executar a ação.";
+            }
+
+            if (returnCompanyId.HasValue)
+                return RedirectToAction("Pipeline", "Applications", new { companyId = returnCompanyId.Value });
+
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
         public class JobApplicationCreateViewModel
         {
             public JobApplicationData Application { get; set; } = new JobApplicationData();

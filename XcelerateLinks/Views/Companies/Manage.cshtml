@@ -152,6 +152,15 @@
             </div>
             <div id="team-list"><p style="color:#a8b2c1;font-size:0.85rem;">A carregar membros...</p></div>
         </div>
+
+        <!-- Pending employer requests section (visible to CompanyAdmin and system Admin) -->
+        @if (isAdmin)
+        {
+            <div class="manage-section" id="pending-requests-section">
+                <h3>📋 Pedidos de Empregador Pendentes</h3>
+                <div id="pending-requests-list"><p style="color:#a8b2c1;font-size:0.85rem;">A carregar...</p></div>
+            </div>
+        }
     </div>
 </div>
 
@@ -161,9 +170,9 @@
     var companyId = @company.CompanyId;
     var ROLES = {
         0: { label: 'Pendente', color: '#6b7280', desc: 'Membro pendente de aprovação' },
-        1: { label: 'Recrutador', color: '#0052CC', desc: 'Pode criar vagas para o seu cargo específico' },
-        2: { label: 'Gestor RH', color: '#7c3aed', desc: 'Pode criar vagas de qualquer tipo' },
-        3: { label: 'Admin de Empresa', color: '#059669', desc: 'Pode criar vagas e editar o perfil da empresa' }
+        1: { label: 'Recrutador', color: '#0052CC', desc: 'Pode criar e gerir vagas de recrutamento' },
+        2: { label: 'Gestor RH', color: '#7c3aed', desc: 'Pode gerir candidaturas e fazer ofertas' },
+        3: { label: 'Admin de Empresa', color: '#059669', desc: 'Acesso total — gere a equipa e a empresa' }
     };
 
     function getToken() {
@@ -175,6 +184,42 @@
         return fetch(url, Object.assign({}, opts, { headers: Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, opts.headers||{}) }));
     }
 
+    // Determine if current user is CompanyAdmin
+    var currentUserMemberRole = -1;
+
+    function renderMemberRow(m, canManageRoles) {
+        var r = ROLES[m.role] || { label: 'Membro', color: '#a8b2c1', desc: '' };
+        var roleChangeHtml = '';
+        if (canManageRoles && m.userId !== undefined) {
+            roleChangeHtml = '<select id="role-select-' + m.userId + '" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:0.2rem 0.4rem;font-size:0.72rem;color:inherit;cursor:pointer;" onchange="changeMemberRole(' + m.userId + ', this.value)">' +
+                '<option value="1"' + (m.role===1?' selected':'') + '>Recrutador</option>' +
+                '<option value="2"' + (m.role===2?' selected':'') + '>Gestor RH</option>' +
+                '<option value="3"' + (m.role===3?' selected':'') + '>Admin de Empresa</option>' +
+                '</select>';
+        }
+        return '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+            '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#0052CC,#00DD55);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:#fff;">' +
+            (m.userName ? m.userName[0].toUpperCase() : '?') + '</div>' +
+            '<div style="flex:1;">' +
+            '<div style="font-weight:600;font-size:0.9rem;">' + (m.userName || '?') + '</div>' +
+            '<div style="font-size:0.75rem;color:#a8b2c1;">' + r.desc + '</div></div>' +
+            (roleChangeHtml || '<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:0.2rem 0.65rem;font-size:0.75rem;font-weight:600;color:' + r.color + ';">' + r.label + '</span>') +
+            '</div>';
+    }
+
+    window.changeMemberRole = function(userId, newRole) {
+        apiFetch('/api/users/' + userId + '/company-role', {
+            method: 'PUT',
+            body: JSON.stringify({ CompanyId: companyId, NewRole: parseInt(newRole) })
+        }).then(function(r) {
+            if (r.ok) {
+                loadTeam();
+            } else {
+                r.text().then(function(t) { alert('Erro ao alterar função: ' + t); });
+            }
+        });
+    };
+
     function loadTeam() {
         apiFetch('/api/companies/' + companyId + '/profile').then(function(r){ return r.json(); }).then(function(profile) {
             var list = document.getElementById('team-list');
@@ -184,16 +229,14 @@
                 list.innerHTML = '<p style="color:#a8b2c1;font-size:0.85rem;">Ainda sem membros de equipa.</p>';
                 return;
             }
+
+            // Find current user's role
+            var myId = parseInt('@(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0")');
+            var myMember = mems.find(function(m) { return m.userId === myId; });
+            var canManageRoles = @(isAdmin ? "true" : "false") || (myMember && myMember.role >= 3);
+
             list.innerHTML = mems.map(function(m) {
-                var r = ROLES[m.role] || { label: 'Membro', color: '#a8b2c1', desc: '' };
-                return '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
-                    '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#0052CC,#00DD55);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:#fff;">' +
-                    (m.userName ? m.userName[0].toUpperCase() : '?') + '</div>' +
-                    '<div style="flex:1;">' +
-                    '<div style="font-weight:600;font-size:0.9rem;">' + (m.userName || '?') + '</div>' +
-                    '<div style="font-size:0.75rem;color:#a8b2c1;">' + r.desc + '</div></div>' +
-                    '<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:0.2rem 0.65rem;font-size:0.75rem;font-weight:600;color:' + r.color + ';">' + r.label + '</span>' +
-                    '</div>';
+                return renderMemberRow(m, canManageRoles);
             }).join('');
         }).catch(function() {
             var list = document.getElementById('team-list');
@@ -201,7 +244,62 @@
         });
     }
 
+    @if (isAdmin)
+    {
+        <text>
+    function loadPendingRequests() {
+        var section = document.getElementById('pending-requests-list');
+        if (!section) return;
+        apiFetch('/api/users/pending-employers').then(function(r){ return r.json(); }).then(function(users) {
+            if (!users || users.length === 0) {
+                section.innerHTML = '<p style="color:#a8b2c1;font-size:0.85rem;">Sem pedidos pendentes.</p>';
+                return;
+            }
+            // Filter to those with company membership for this company
+            section.innerHTML = users.map(function(u) {
+                var docHtml = u.employerRequestDocumentUrl
+                    ? '<a href="' + u.employerRequestDocumentUrl + '" target="_blank" style="font-size:0.78rem;color:#4f8ef7;">📄 Ver anexo</a>'
+                    : '<span style="font-size:0.78rem;color:#6b7280;">Sem anexo</span>';
+                var noteHtml = u.employerRequestNote
+                    ? '<div style="font-size:0.75rem;color:#a8b2c1;margin-top:0.2rem;">' + u.employerRequestNote + '</div>'
+                    : '';
+                return '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+                    '<div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:#f59e0b;">' +
+                    (u.name ? u.name[0].toUpperCase() : '?') + '</div>' +
+                    '<div style="flex:1;">' +
+                    '<div style="font-weight:600;font-size:0.88rem;">' + (u.name || '—') + '</div>' +
+                    '<div style="font-size:0.75rem;color:#a8b2c1;">' + (u.email || '') + '</div>' +
+                    noteHtml + '</div>' +
+                    docHtml +
+                    '<button onclick="approveRequest(' + u.userId + ')" style="background:rgba(0,221,85,0.12);border:1px solid rgba(0,221,85,0.3);color:#00DD55;border-radius:20px;padding:0.25rem 0.75rem;font-size:0.78rem;cursor:pointer;margin-left:0.4rem;">✓ Aprovar</button>' +
+                    '<button onclick="rejectRequest(' + u.userId + ')" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#ef4444;border-radius:20px;padding:0.25rem 0.75rem;font-size:0.78rem;cursor:pointer;margin-left:0.3rem;">✗ Rejeitar</button>' +
+                    '</div>';
+            }).join('');
+        }).catch(function() {
+            if (section) section.innerHTML = '<p style="color:#a8b2c1;font-size:0.85rem;">Não foi possível carregar pedidos.</p>';
+        });
+    }
+    window.approveRequest = function(uid) {
+        apiFetch('/api/users/' + uid + '/approve-employer', { method: 'POST' }).then(function(r) {
+            if (r.ok) { loadTeam(); loadPendingRequests(); }
+            else r.text().then(function(t){ alert(t); });
+        });
+    };
+    window.rejectRequest = function(uid) {
+        apiFetch('/api/users/' + uid + '/reject-employer', { method: 'POST' }).then(function(r) {
+            if (r.ok) { loadPendingRequests(); }
+            else r.text().then(function(t){ alert(t); });
+        });
+    };
+    document.addEventListener('DOMContentLoaded', function() { loadTeam(); loadPendingRequests(); });
+        </text>
+    }
+    else
+    {
+        <text>
     document.addEventListener('DOMContentLoaded', loadTeam);
+        </text>
+    }
 })();
 </script>
 }

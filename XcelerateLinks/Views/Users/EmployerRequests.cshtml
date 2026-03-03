@@ -66,6 +66,8 @@
                     <thead>
                         <tr>
                             <th>Utilizador</th>
+                            <th>Nota / Empresa Solicitada</th>
+                            <th>Anexo</th>
                             <th>Estado</th>
                             <th>Ações</th>
                         </tr>
@@ -96,9 +98,40 @@
                                         </div>
                                     </div>
                                 </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(user.EmployerRequestNote))
+                                    {
+                                        <span style="font-size:0.82rem;color:var(--dark-text-muted,#a8b2c1);">@user.EmployerRequestNote</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size:0.78rem;color:var(--dark-text-muted,#a8b2c1);">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(user.EmployerRequestDocumentUrl))
+                                    {
+                                        var docUrl = user.EmployerRequestDocumentUrl;
+                                        var isImage = docUrl.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || docUrl.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) || docUrl.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+                                        if (isImage)
+                                        {
+                                            <a href="@docUrl" target="_blank" rel="noopener">
+                                                <img src="@docUrl" alt="Anexo" style="height:40px;width:40px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,0.1);" />
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a href="@docUrl" target="_blank" rel="noopener" style="font-size:0.82rem;color:#4f8ef7;">📄 Ver documento</a>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size:0.78rem;color:var(--dark-text-muted,#a8b2c1);">Sem anexo</span>
+                                    }
+                                </td>
                                 <td><span class="badge-pending">⏳ Pendente</span></td>
                                 <td>
-                                    <div style="display:flex;gap:0.5rem;">
+                                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                                         <form method="post" asp-action="ApproveEmployer" asp-route-id="@user.UserId">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn-approve">✓ Aprovar</button>

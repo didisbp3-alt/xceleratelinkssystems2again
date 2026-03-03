@@ -13,5 +13,8 @@ namespace APIPSI16.Models.DTOs
         public string? ProfilePictureUrl { get; set; }
         public int? Role { get; set; }
         public string? BannerUrl { get; set; }
+        public int SubscriptionPlan { get; set; }
+        public string? EmployerRequestDocumentUrl { get; set; }
+        public string? EmployerRequestNote { get; set; }
     }
 }

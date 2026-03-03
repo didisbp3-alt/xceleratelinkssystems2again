@@ -3,6 +3,9 @@ using APIPSI16.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 
 namespace APIPSI16.Controllers
@@ -91,16 +94,19 @@ namespace APIPSI16.Controllers
             var currentUserId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
 
-            // Employers can only create opportunities for companies they're members of
+            // Employers can only create opportunities for companies they're members of (Recruiter, HRManager, or CompanyAdmin)
             if (userRole == "2" && opportunity.CompanyId.HasValue)
             {
                 if (!currentUserId.HasValue) return Unauthorized();
 
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == opportunity.CompanyId.Value && cm.UserId == currentUserId.Value);
+                var member = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == opportunity.CompanyId.Value && cm.UserId == currentUserId.Value);
 
-                if (!isMember)
-                    return Forbid("You can only create opportunities for companies you're a member of.");
+                if (member == null)
+                    return Forbid("Só podes criar vagas para empresas onde és membro.");
+                // Role 1=Recruiter (can create), 2=HRManager (can create), 3=CompanyAdmin (can create)
+                if (member.Role < 1)
+                    return Forbid("Membro pendente não pode criar vagas. Aguarda a aprovação do admin da empresa.");
             }
 
             _context.Add(opportunity);
@@ -123,16 +129,16 @@ namespace APIPSI16.Controllers
             var currentUserId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
 
-            // Employers can only update opportunities for companies they're members of
+            // Employers can only update opportunities for companies they're active members of (role >= 1)
             if (userRole == "2" && existingOpp.CompanyId.HasValue)
             {
                 if (!currentUserId.HasValue) return Unauthorized();
 
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == existingOpp.CompanyId.Value && cm.UserId == currentUserId.Value);
+                var member = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == existingOpp.CompanyId.Value && cm.UserId == currentUserId.Value);
 
-                if (!isMember)
-                    return Forbid("You can only update opportunities for companies you're a member of.");
+                if (member == null || member.Role < 1)
+                    return Forbid("Não tens permissão para editar vagas desta empresa.");
             }
 
             _context.Entry(existingOpp).State = EntityState.Detached;
@@ -164,6 +170,98 @@ namespace APIPSI16.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        // GET: api/Opportunities/{id}/match
+        // Returns match percentage for the current user vs this opportunity
+        [HttpGet("{id}/match")]
+        public async Task<IActionResult> GetMatchScore(int id)
+        {
+            var uid = GetCurrentUserId();
+            if (uid == null) return Unauthorized();
+
+            var opp = await _context.Opportunities.FindAsync(id);
+            if (opp == null) return NotFound();
+
+            var score = await CalculateMatchScoreAsync(uid.Value, opp);
+            return Ok(new { opportunityId = id, matchScore = score });
+        }
+
+        // GET: api/Opportunities/with-match
+        // Returns all opportunities with match percentage for the current user
+        [HttpGet("with-match")]
+        public async Task<IActionResult> GetOpportunitiesWithMatch()
+        {
+            var uid = GetCurrentUserId();
+            if (uid == null) return Unauthorized();
+
+            var opportunities = await _context.Opportunities
+                .Include(o => o.Company)
+                .ToListAsync();
+
+            var userPrefIds = await _context.UserJobPreferences
+                .Where(p => p.UserId == uid.Value)
+                .Select(p => p.JobRoleId)
+                .ToListAsync();
+
+            var userSkillIds = await _context.UserSkills
+                .Where(us => us.UserId == uid.Value)
+                .Select(us => us.SkillId)
+                .ToListAsync();
+
+            var results = opportunities.Select(o =>
+            {
+                var requiredRoleIds = string.IsNullOrWhiteSpace(o.RequiredJobRoleIds)
+                    ? new HashSet<int>()
+                    : o.RequiredJobRoleIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => int.TryParse(s.Trim(), out var v) ? v : 0)
+                        .Where(v => v > 0)
+                        .ToHashSet();
+
+                int matchScore = 0;
+                if (requiredRoleIds.Count > 0)
+                {
+                    var matches = userPrefIds.Count(id => requiredRoleIds.Contains(id));
+                    matchScore = (int)Math.Round((double)matches / requiredRoleIds.Count * 100);
+                }
+
+                return new
+                {
+                    o.Id,
+                    o.Title,
+                    o.Location,
+                    o.EmploymentType,
+                    o.SeniorityLevel,
+                    o.RemoteOption,
+                    o.CompanyId,
+                    CompanyName = o.Company?.Name,
+                    o.RequiredJobRoleIds,
+                    MatchScore = matchScore
+                };
+            }).OrderByDescending(o => o.MatchScore).ToList();
+
+            return Ok(results);
+        }
+
+        private async Task<int> CalculateMatchScoreAsync(int userId, Opportunity opp)
+        {
+            if (string.IsNullOrWhiteSpace(opp.RequiredJobRoleIds)) return 0;
+
+            var requiredRoleIds = opp.RequiredJobRoleIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s.Trim(), out var v) ? v : 0)
+                .Where(v => v > 0)
+                .ToHashSet();
+
+            if (requiredRoleIds.Count == 0) return 0;
+
+            var userPrefIds = await _context.UserJobPreferences
+                .Where(p => p.UserId == userId)
+                .Select(p => p.JobRoleId)
+                .ToListAsync();
+
+            var matches = userPrefIds.Count(id => requiredRoleIds.Contains(id));
+            return (int)Math.Round((double)matches / requiredRoleIds.Count * 100);
         }
 
         private bool OpportunityExists(int id)

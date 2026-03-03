@@ -28,6 +28,9 @@ public partial class JobApplication
     // Comma-separated job role IDs chosen by the applicant
     public string? SelectedJobRoleIds { get; set; }
 
+    /// <summary>Response from the applicant: null=no action needed, 1=accepted, 2=declined.</summary>
+    public byte? ApplicantResponse { get; set; }
+
     public virtual Opportunity Opportunity { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;

@@ -130,9 +130,10 @@ namespace APIPSI16.Controllers
             if (userRole == "2")
             {
                 if (!currentUserId.HasValue) return Unauthorized();
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
-                if (!isMember) return Forbid();
+                var actorMember = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
+                if (actorMember == null || actorMember.Role < 3)
+                    return Forbid("Apenas admins de empresa podem alterar o logótipo da empresa.");
             }
 
             if (!_fileStorage.ValidateImageFile(file, out var errorMessage))
@@ -171,9 +172,11 @@ namespace APIPSI16.Controllers
             if (userRole == "2")
             {
                 if (!currentUserId.HasValue) return Unauthorized();
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
-                if (!isMember) return Forbid();
+                var actorMember = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
+                if (actorMember == null) return Forbid();
+                if (actorMember.Role < 3)
+                    return Forbid("Apenas admins de empresa podem convidar membros.");
             }
 
             member.CompanyId = id;
@@ -197,9 +200,12 @@ namespace APIPSI16.Controllers
             if (userRole == "2")
             {
                 if (!currentUserId.HasValue) return Unauthorized();
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
-                if (!isMember) return Forbid();
+                // Must be CompanyAdmin (Role=3) to remove members
+                var actorMember = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
+                if (actorMember == null) return Forbid();
+                if (actorMember.Role < 3 && currentUserId.Value != userId) // Allow self-removal at any role
+                    return Forbid("Apenas admins de empresa podem remover membros.");
             }
 
             var member = await _context.CompanyMembers
@@ -246,11 +252,11 @@ namespace APIPSI16.Controllers
             {
                 if (!currentUserId.HasValue) return Unauthorized();
 
-                var isMember = await _context.CompanyMembers
-                    .AnyAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
+                var actorMember = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.CompanyId == id && cm.UserId == currentUserId.Value);
 
-                if (!isMember)
-                    return Forbid("You can only update companies you're a member of.");
+                if (actorMember == null || actorMember.Role < 3)
+                    return Forbid("Apenas admins de empresa podem atualizar os dados da empresa.");
             }
 
             _context.Entry(company).State = EntityState.Modified;

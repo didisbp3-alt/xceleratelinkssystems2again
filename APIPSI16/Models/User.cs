@@ -29,6 +29,15 @@ public partial class User
 
     public string? BannerUrl { get; set; }
 
+    /// <summary>Subscription plan: 0=Free, 1=Pro, 2=Enterprise</summary>
+    public int SubscriptionPlan { get; set; } = 0;
+
+    /// <summary>URL of the document uploaded when requesting employer role.</summary>
+    public string? EmployerRequestDocumentUrl { get; set; }
+
+    /// <summary>Optional note/reason submitted with the employer role request.</summary>
+    public string? EmployerRequestNote { get; set; }
+
     public virtual ICollection<AuditLog> AuditLogs{ get; set; } = new List<AuditLog>();
 
     public virtual ICollection<ChatMessage> ChatMessages { get; set; } = new List<ChatMessage>();

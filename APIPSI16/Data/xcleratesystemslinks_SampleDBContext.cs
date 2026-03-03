@@ -168,18 +168,6 @@ public partial class xcleratesystemslinks_SampleDBContext : DbContext
                 .IsUnicode(false);
         });
 
-        modelBuilder.Entity<Company>(entity =>
-        {
-            entity.HasKey(e => e.CompanyId).HasName("PK__Companies__CompanyId");
-            entity.ToTable("Companies");
-
-            entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.Industry).HasMaxLength(100);
-            entity.Property(e => e.Location).HasMaxLength(150);
-            entity.Property(e => e.CompanyLogoUrl).HasMaxLength(255);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-        });
-
         modelBuilder.Entity<Connection>(entity =>
         {
             entity.HasKey(e => e.ConnectionId).HasName("PK__Connecti__404A64931F69BCCF");
@@ -208,6 +196,7 @@ public partial class xcleratesystemslinks_SampleDBContext : DbContext
             entity.Property(e => e.LinkedInUrl).HasMaxLength(300);
             entity.Property(e => e.PortfolioUrl).HasMaxLength(300);
             entity.Property(e => e.SelectedJobRoleIds).HasMaxLength(500);
+            entity.Property(e => e.ApplicantResponse).IsRequired(false);
 
             entity.HasOne(d => d.Opportunity)
                 .WithMany(p => p.JobApplications)
@@ -453,6 +442,9 @@ public partial class xcleratesystemslinks_SampleDBContext : DbContext
             entity.Property(e => e.ProfilePictureUrl)
                 .HasMaxLength(255)
                 .IsUnicode(false);
+            entity.Property(e => e.SubscriptionPlan).HasDefaultValue(0);
+            entity.Property(e => e.EmployerRequestDocumentUrl).HasMaxLength(500);
+            entity.Property(e => e.EmployerRequestNote).HasMaxLength(1000);
         });
 
         modelBuilder.Entity<UserJobPreference>(entity =>
